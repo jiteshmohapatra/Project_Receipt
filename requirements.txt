@@ -1,0 +1,7 @@
+python-telegram-bot==20.3
+requests
+python-dotenv
+reportlab
+flask
+psycopg2-binary
+word2number
