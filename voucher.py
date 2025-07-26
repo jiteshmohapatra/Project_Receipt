@@ -191,6 +191,9 @@ VOUCHER_HTML = """
     <button class="btn" onclick="saveVoucher()">Save Voucher</button>
 
    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+   <script src="/static/savePDF.js"></script>
+
 <script>
     function saveVoucher() {
         const form = document.body;
@@ -222,7 +225,8 @@ VOUCHER_HTML = """
                 formData.append('upload_stamp', fileInput2.files[0]);
             }
 
-            fetch('/save_voucher/{{ session_id }}', {
+            // 🔁 Change this to fetch and then trigger PDF
+            fetch(`/save_voucher/{{ session_id }}`, {
                 method: 'POST',
                 body: formData
             })
@@ -231,25 +235,51 @@ VOUCHER_HTML = """
                 throw new Error("Server error");
             })
             .then(blob => {
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = "voucher.png";
-                document.body.appendChild(link);
-                link.click();
-                link.remove();
+                // 1️⃣ Download PNG
+                const imageLink = document.createElement('a');
+                imageLink.href = URL.createObjectURL(blob);
+                imageLink.download = "voucher.png";
+                document.body.appendChild(imageLink);
+                imageLink.click();
+                imageLink.remove();
 
-                // ✅ Success message
-                alert("✅ Voucher saved successfully!");
+                // 2️⃣ Download PDF automatically using savePDF.js
+                savePDF("{{ session_id }}", () => {
+                    alert("✅ Voucher saved and PDF downloaded!");
+                });
             })
             .catch(err => {
+                console.error(err);
                 alert("❌ Failed to save voucher.");
             });
         });
     }
 </script>
+
 </body>
 </html>
 """
+
+from flask import Flask, render_template_string, request, jsonify, send_file
+from datetime import datetime
+from io import BytesIO
+
+# Shared storage for session data
+voucher_data = {}
+
+# Flask app
+voucher_app = Flask(__name__)
+
+# Path to your logo file (place logo.png in a folder called 'static')
+LOGO_PATH = "static/logo.png"
+
+# Database Config
+DATABASE_CONFIG = {
+    'host': 'bcpostgressqlserver.postgres.database.azure.com',
+    'database': 'Bfl_ocr',
+    'user': 'Vertoxlabs',
+    'password': 'Vtx@2025',
+}
 
 # Initialize the database
 def init_db():
@@ -305,7 +335,7 @@ def voucher_form(session_id):
                 'DEBIT': row[3],
                 'CREDIT': row[4],
                 'Amount': row[5],
-                'time': row[6],
+                'Time': row[6],
                 'Reason': row[7],
                 'Procured From': row[8],
                 'Location': row[9],
@@ -318,7 +348,7 @@ def voucher_form(session_id):
 
     return render_template_string(VOUCHER_HTML, data=data, session_id=session_id)
 
-# Save voucher form data and image
+# Save voucher form data and image, then return HTML to show PDF
 @voucher_app.route('/save_voucher/<session_id>', methods=['POST'])
 def save_voucher(session_id):
     try:
@@ -346,7 +376,7 @@ def save_voucher(session_id):
                 debit = EXCLUDED.debit,
                 credit = EXCLUDED.credit,
                 amount = EXCLUDED.amount,
-                time= EXCLUDED.time,
+                time = EXCLUDED.time,
                 reason = EXCLUDED.reason,
                 procured_from = EXCLUDED.procured_from,
                 location = EXCLUDED.location,
@@ -375,20 +405,38 @@ def save_voucher(session_id):
         cur.close()
         conn.close()
 
-        # Return image directly to browser for download (without saving to disk)
+        # ✅ [Change 1] Return confirmation HTML page that will let the user create PDF in frontend
+         # Return image directly to browser for download (without saving to disk)
         return send_file(
             BytesIO(image_bytes),
             mimetype='image/png',
             as_attachment=True,
             download_name=f"voucher_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
         )
-        
+
     except Exception as e:
         logging.error(f"❌ Error saving voucher: {e}")
         return jsonify({"message": "❌ Failed to save voucher."}), 500
+
+
+@voucher_app.route('/voucher_image/<session_id>')
+def get_voucher_image(session_id):
+    try:
+        conn = psycopg2.connect(**DATABASE_CONFIG)
+        cur = conn.cursor()
+        cur.execute('SELECT image FROM brochure WHERE session_id = %s', (session_id,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row and row[0]:
+            return send_file(BytesIO(row[0]), mimetype='image/png')
+        else:
+            return "No image found", 404
+    except Exception as e:
+        logging.error(f"❌ Error retrieving voucher image: {e}")
+        return "Server error", 500
 
 # Run the app
 def run_voucher_app(host='0.0.0.0', port=5001, use_reloader=False):
     init_db()
     voucher_app.run(host=host, port=port, use_reloader=use_reloader)
-

@@ -179,9 +179,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data == "upi":
             user_state[user_id]["stage"] = "upi_subtype"
             keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🟦 PhonePe", callback_data="PhonePe"),
-                 InlineKeyboardButton("🟩 Paytm", callback_data="Paytm"),
-                 InlineKeyboardButton("🟪 GooglePay", callback_data="GooglePay")]
+                [InlineKeyboardButton("\U0001F7E3 PhonePe", callback_data="PhonePe"),
+                InlineKeyboardButton("\U0001F537 Paytm", callback_data="Paytm"),
+                InlineKeyboardButton("\U0001F535 GooglePay", callback_data="GooglePay")]
             ])
             await query.edit_message_text("💡 Choose UPI type:", reply_markup=keyboard)
         else:
@@ -218,8 +218,8 @@ async def process_receipt(query, user_id, category):
             # }
             insert_extracted_receipt(user_id, category, fields)
             insert_or_update_brochure(session_id, fields)
-            link = f"http://192.168.1.3:5001/voucher/{session_id}?startapp=1"
-            await query.edit_message_text(f"✅ Data saved.\n\n🌐 Fill voucher: {link}")
+            link = f"http://192.168.1.48:5001/voucher/{session_id}?startapp=1"
+            await query.edit_message_text(f"✅ Data saved and waiting for voucher....\n\n🌐 Fill voucher: {link}")
         else:
             await query.edit_message_text("⚠️ Unsupported category.")
     except Exception as e:
