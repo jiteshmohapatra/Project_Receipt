@@ -173,6 +173,7 @@ VOUCHER_HTML = """
             <td class="label">Location</td>
             <td colspan="3"><input type="text" id="location" class="input" value="{{ data.get('Location', '') }}"></td>
         </tr>
+        
         <tr>
             <td class="label">Additional Receipt</td>
             <td colspan="3"><input type="file" id="additional_receipt" class="input" accept="image/*,application/pdf"></td>
