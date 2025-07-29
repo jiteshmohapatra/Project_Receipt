@@ -51,7 +51,8 @@ def init_db():
                 reason TEXT,
                 procured_from TEXT NULL,
                 location TEXT NULL,
-                additional_receipt BYTEA,
+                additional_receipt1 BYTEA,
+                additional_receipt2 BYTEA,
                 upload_stamp BYTEA,
                 receiver_signature TEXT,
                 image BYTEA,
@@ -90,7 +91,7 @@ def insert_extracted_receipt(user_id, category, fields):
     except Exception as e:
         logging.error(f"❌ Failed to insert receipt: {e}")
 
-def insert_or_update_brochure(session_id, fields):
+def insert_or_update_brochure(data):
     try:
         conn = psycopg2.connect(**DATABASE_CONFIG)
         cur = conn.cursor()
@@ -100,28 +101,13 @@ def insert_or_update_brochure(session_id, fields):
                 amount, time , reason, procured_from, location, receiver_signature
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (session_id) DO UPDATE
-            SET
-                date = EXCLUDED.date,
-                account_name = EXCLUDED.account_name,
-                amount = EXCLUDED.amount
-        ''', (
-            session_id,
-            None,
-            fields.get("Date & Time"),
-            fields.get("Person Name"),
-            None,
-            None,
-            fields.get("Amount"),
-            None,
-            None,
-            None,
-            None,
-            None
+        '''(
+            data
         ))
+         
         conn.commit()
         cur.close()
         conn.close()
-        logging.info(f"✅ Brochure updated for session {session_id}")
+        logging.info(f"✅ Brochure created ")
     except Exception as e:
-        logging.error(f"❌ Failed to update brochure: {e}")
+        logging.error(f"❌ Failed to create brochure: {e}")

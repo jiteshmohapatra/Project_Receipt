@@ -138,16 +138,16 @@ VOUCHER_HTML = """
             <td colspan="3"><input type="text" id="account_name" class="input" value="{{ data.get('Name of the Account', '') }}"></td>
         </tr>
         <tr>
-            <td class="label">DEBIT</td>
+            <td class="label">Type of Expenses</td>
             <td colspan="3"><input type="text" id="debit" class="input" value="{{ data.get('DEBIT', '') }}"></td>
         </tr>
         <tr>
-            <td class="label">CREDIT</td>
-            <td colspan="3"><input type="text" id="credit" class="input" value="{{ data.get('CREDIT', '') }}"></td>
+            <td class="label">Transaction ID</td>
+            <td colspan="3"><input type="text" id="credit" class="input" value="{{ data.transaction_id or '' }}"></td>
         </tr>
         <tr>
             <td class="label">Amount (Rs.)</td>
-            <td colspan="3"><input type="number" id="amount" class="input" value="{{ data.get('Amount', '') }}"></td>
+            <td colspan="3"><input type="text" id="amount" class="input" value="{{ data.amount or '' }}"></td>
         </tr>
       <tr>
             <td class="label">Time</td>
@@ -226,32 +226,52 @@ VOUCHER_HTML = """
             }
 
             // 🔁 Change this to fetch and then trigger PDF
-            fetch(`/save_voucher/{{ session_id }}`, {
+            fetch(`/save_voucher`, {
                 method: 'POST',
                 body: formData
             })
             .then(resp => {
-                if (resp.ok) return resp.blob();
-                throw new Error("Server error");
+                if (!resp.ok) throw new Error("Server error");
+                return resp.json();
             })
-            .then(blob => {
-                // 1️⃣ Download PNG
-                const imageLink = document.createElement('a');
-                imageLink.href = URL.createObjectURL(blob);
-                imageLink.download = "voucher.png";
-                document.body.appendChild(imageLink);
-                imageLink.click();
-                imageLink.remove();
+            .then(result => {
+                if (!result.record_id) {
+                    throw new Error("No record ID returned from server.");
+                }
 
-                // 2️⃣ Download PDF automatically using savePDF.js
-                savePDF("{{ session_id }}", () => {
-                    alert("✅ Voucher saved and PDF downloaded!");
-                });
+                // 1️⃣ Download PNG image from voucher image endpoint
+                fetch(`/voucher_image/${result.record_id}`)
+                    .then(imgResp => {
+                        if (!imgResp.ok) throw new Error("Failed to fetch voucher image.");
+                        return imgResp.blob();
+                    })
+                    .then(blob => {
+                        const imageLink = document.createElement('a');
+                        imageLink.href = URL.createObjectURL(blob);
+                        imageLink.download = "voucher.png";
+                        document.body.appendChild(imageLink);
+                        imageLink.click();
+                        imageLink.remove();
+
+                        // 2️⃣ Generate and download PDF
+                        savePDF(result.record_id, () => {
+                            alert("✅ Voucher saved and PDF downloaded!");
+                        });
+                    })
+                    .catch(imgErr => {
+                        console.error(imgErr);
+                        alert("⚠️ Voucher saved, but image fetch failed.");
+                        // Still generate the PDF even if image failed
+                        savePDF(result.record_id, () => {
+                            alert("✅ Voucher saved and PDF downloaded!");
+                        });
+                    });
             })
             .catch(err => {
                 console.error(err);
                 alert("❌ Failed to save voucher.");
             });
+
         });
     }
 </script>
@@ -289,7 +309,6 @@ def init_db():
         cur.execute('''
             CREATE TABLE IF NOT EXISTS brochure (
                 id SERIAL PRIMARY KEY,
-                session_id UUID UNIQUE,
                 slno TEXT,
                 date TEXT,
                 account_name TEXT,
@@ -310,52 +329,46 @@ def init_db():
         conn.commit()
         cur.close()
         conn.close()
-        logging.info("✅ Database initialized and tables ready.")
+        logging.info("✅ Database initialized.")
     except Exception as e:
-        logging.error(f"❌ Failed to initialize DB: {e}")
+        logging.error(f"❌ Failed to init DB: {e}")
 
-# Render voucher HTML
-@voucher_app.route('/voucher/<session_id>')
-def voucher_form(session_id):
-    data = {}
+# 👇 Render empty voucher form
+@voucher_app.route("/voucher", methods=["GET"])
+def voucher_form():
     try:
         conn = psycopg2.connect(**DATABASE_CONFIG)
         cur = conn.cursor()
+
+        # Fetch only transaction_id and amount from the latest extracted_receipt
         cur.execute('''
-            SELECT slno, date, account_name, debit, credit, amount, time, reason, procured_from, location, receiver_signature
-            FROM brochure
-            WHERE session_id = %s
-        ''', (session_id,))
+            SELECT transaction_id, amount
+            FROM extracted_receipts
+            ORDER BY created_at DESC
+            LIMIT 1;
+        ''')
         row = cur.fetchone()
-        if row:
-            data = {
-                'Sl No': row[0],
-                'Date': row[1],
-                'Name of the Account': row[2],
-                'DEBIT': row[3],
-                'CREDIT': row[4],
-                'Amount': row[5],
-                'Time': row[6],
-                'Reason': row[7],
-                'Procured From': row[8],
-                'Location': row[9],
-                'Receiver Signature': row[10],
-            }
         cur.close()
         conn.close()
+        logging.info(f"Fetched row: {row}")
+        data = {
+            "transaction_id": row[0] if row else '',
+            "amount": row[1] if row else ''
+        }
+
+        return render_template_string(VOUCHER_HTML, data=data)
+
     except Exception as e:
-        logging.error(f"❌ DB fetch error: {e}")
+        logging.error(f"❌ Failed to fetch receipt data: {e}")
+        return render_template_string(VOUCHER_HTML, data={})
 
-    return render_template_string(VOUCHER_HTML, data=data, session_id=session_id)
 
-# Save voucher form data and image, then return HTML to show PDF
-@voucher_app.route('/save_voucher/<session_id>', methods=['POST'])
-def save_voucher(session_id):
+# 👇 Save voucher to DB after submission
+@voucher_app.route('/save_voucher', methods=['POST'])
+def save_voucher():
     try:
         data = request.form
         image_data_url = data.get('image_data')
-
-        # Convert base64 image to binary
         header, encoded = image_data_url.split(',', 1)
         image_bytes = base64.b64decode(encoded)
 
@@ -366,26 +379,12 @@ def save_voucher(session_id):
         cur = conn.cursor()
         cur.execute('''
             INSERT INTO brochure (
-                session_id, slno, date, account_name, debit, credit, amount, time,
-                reason, procured_from, location, additional_receipt, upload_stamp, receiver_signature, image
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (session_id) DO UPDATE SET
-                slno = EXCLUDED.slno,
-                date = EXCLUDED.date,
-                account_name = EXCLUDED.account_name,
-                debit = EXCLUDED.debit,
-                credit = EXCLUDED.credit,
-                amount = EXCLUDED.amount,
-                time = EXCLUDED.time,
-                reason = EXCLUDED.reason,
-                procured_from = EXCLUDED.procured_from,
-                location = EXCLUDED.location,
-                additional_receipt = EXCLUDED.additional_receipt,
-                upload_stamp = EXCLUDED.upload_stamp,
-                receiver_signature = EXCLUDED.receiver_signature,
-                image = EXCLUDED.image;
+                slno, date, account_name, debit, credit, amount, time,
+                reason, procured_from, location, additional_receipt,
+                upload_stamp, receiver_signature, image
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id;
         ''', (
-            session_id,
             data['slno'],
             data['date'],
             data['account_name'],
@@ -401,30 +400,30 @@ def save_voucher(session_id):
             data['receiver_signature'],
             psycopg2.Binary(image_bytes)
         ))
+        
+        record_id = cur.fetchone()[0]
         conn.commit()
         cur.close()
         conn.close()
 
-        # ✅ [Change 1] Return confirmation HTML page that will let the user create PDF in frontend
-         # Return image directly to browser for download (without saving to disk)
-        return send_file(
-            BytesIO(image_bytes),
-            mimetype='image/png',
-            as_attachment=True,
-            download_name=f"voucher_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-        )
-
+        # return send_file(
+        #     BytesIO(image_bytes),
+        #     mimetype='image/png',
+        #     as_attachment=True,
+        #     download_name=f"voucher_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        # )
+        return jsonify({"message": "✅ Voucher saved", "record_id": record_id})
     except Exception as e:
-        logging.error(f"❌ Error saving voucher: {e}")
+        logging.error(f"❌ Failed to save voucher: {e}")
         return jsonify({"message": "❌ Failed to save voucher."}), 500
 
-
-@voucher_app.route('/voucher_image/<session_id>')
-def get_voucher_image(session_id):
+# 🔄 Optional route: serves only image if needed later (you can delete if unused)
+@voucher_app.route('/voucher_image/<int:record_id>')
+def get_voucher_image(record_id):
     try:
         conn = psycopg2.connect(**DATABASE_CONFIG)
         cur = conn.cursor()
-        cur.execute('SELECT image FROM brochure WHERE session_id = %s', (session_id,))
+        cur.execute('SELECT image FROM brochure WHERE id = %s', (record_id,))
         row = cur.fetchone()
         cur.close()
         conn.close()
@@ -436,7 +435,7 @@ def get_voucher_image(session_id):
         logging.error(f"❌ Error retrieving voucher image: {e}")
         return "Server error", 500
 
-# Run the app
+# Run
 def run_voucher_app(host='0.0.0.0', port=5001, use_reloader=False):
     init_db()
     voucher_app.run(host=host, port=port, use_reloader=use_reloader)

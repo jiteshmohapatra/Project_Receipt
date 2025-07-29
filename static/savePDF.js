@@ -16,20 +16,29 @@ const justificationMap = {
     'Travel expenses': justifications[3]
 };
 
-async function fetchVoucherImage(sessionId) {
+async function fetchVoucherImage(recordId) {
     try {
-        const res = await fetch(`/voucher_image/${sessionId}`);
-        const blob = await res.blob();
-        return await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.readAsDataURL(blob);
-        });
-    } catch (e) {
-        console.warn("⚠️ Failed to fetch voucher image", e);
+        const response = await fetch(`/voucher_image/${recordId}`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch voucher image');
+        }
+        const blob = await response.blob();
+        return await readBlobAsBase64(blob);
+    } catch (err) {
+        console.warn('Could not fetch voucher image:', err);
         return null;
     }
 }
+
+function readBlobAsBase64(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+}
+
 
 function drawHeader(doc, pageWidth) {
     const blueHeight = 30;
@@ -119,7 +128,13 @@ async function getImageDimensions(base64) {
     });
 }
 
-async function savePDF(sessionId, callback) {
+async function savePDF(recordId, callback) {
+    if (typeof callback !== 'function') {
+        console.error('❌ Callback must be a function.');
+        alert('❌ Internal error: Missing callback function.');
+        return;
+    }
+
     if (!jsPDF) {
         console.error('jsPDF not loaded, local and CDN fallbacks failed');
         alert('❌ PDF generation library (jsPDF) not loaded. Please check your internet connection or refresh the page.');
@@ -128,7 +143,7 @@ async function savePDF(sessionId, callback) {
     }
 
     try {
-        console.log('Starting savePDF for session:', sessionId);
+        console.log('Starting savePDF for session:', recordId);
 
         const transactionId = document.getElementById('credit')?.value.trim();
         const amount = document.getElementById('amount')?.value.trim();
@@ -153,7 +168,7 @@ async function savePDF(sessionId, callback) {
 
         const stampBase64 = await readFileAsBase64(stampInput);
         const receiptBase64 = await readFileAsBase64(receiptInput);
-        const voucherImageBase64 = await fetchVoucherImage(sessionId);
+        const voucherImageBase64 = await fetchVoucherImage(recordId);
         console.log('Files read:', { stampBase64: !!stampBase64, receiptBase64: !!receiptBase64 });
 
         const doc = new jsPDF('p', 'mm', 'a4');
@@ -164,7 +179,6 @@ async function savePDF(sessionId, callback) {
         if (voucherImageBase64) totalPages++;
         if (receiptBase64) totalPages++;
 
-        // Map the selected dropdown value to the full justification text
         const selectedJustification = justificationMap[justification] || '';
 
         for (let page = 1; page <= totalPages; page++) {
@@ -173,9 +187,7 @@ async function savePDF(sessionId, callback) {
             drawFooter(doc, page, totalPages, pageWidth, pageHeight);
 
             if (page === 1) {
-                doc.setFont('times', 'normal');
-                doc.setFontSize(12);
-                doc.setTextColor(0, 0, 0);
+                doc.setFont('times', 'normal').setFontSize(12).setTextColor(0, 0, 0);
 
                 let y = 70;
                 doc.text('To', 20, y);
@@ -184,11 +196,9 @@ async function savePDF(sessionId, callback) {
                 doc.text('Bhubaneswar, Odisha, 751024', 20, y += 8);
                 y += 10;
                 doc.setFont('times', 'bold');
-                doc.setFontSize(12);
                 doc.text('Subject: Justification for Non-GST Bill Submission under Fabrication/Consumable/raw material/travel/contingency.', 20, y, { maxWidth: 170 });
                 y += 15;
                 doc.setFont('times', 'normal');
-                doc.setFontSize(12);
                 doc.text('Dear Sir/Madam,', 20, y);
                 y += 10;
 
@@ -197,40 +207,23 @@ async function savePDF(sessionId, callback) {
                 y += 10;
 
                 doc.setFont('times', 'bold');
-                doc.setFontSize(12);
                 doc.text(`Transaction ID:`, 20, y += 8);
-                doc.setFont('times', 'normal');
-                doc.setFontSize(12);
-                doc.text(`${transactionId}`, 65, y);
+                doc.setFont('times', 'normal').text(`${transactionId}`, 65, y);
 
-                doc.setFont('times', 'bold');
-                doc.setFontSize(12);
-                doc.text(`Amount Rs.:`, 20, y += 6);
-                doc.setFont('times', 'normal');
-                doc.setFontSize(12);
-                doc.text(`${amount}`, 65, y);
+                doc.setFont('times', 'bold').text(`Amount Rs.:`, 20, y += 6);
+                doc.setFont('times', 'normal').text(`${amount}`, 65, y);
 
-                doc.setFont('times', 'bold');
-                doc.setFontSize(12);
-                doc.text(`Date:`, 20, y += 6);
-                doc.setFont('times', 'normal');
-                doc.setFontSize(12);
-                doc.text(`${date}`, 65, y);
+                doc.setFont('times', 'bold').text(`Date:`, 20, y += 6);
+                doc.setFont('times', 'normal').text(`${date}`, 65, y);
 
-                doc.setFont('times', 'bold');
-                doc.setFontSize(12);
-                doc.text(`Time:`, 20, y += 6);
-                doc.setFont('times', 'normal');
-                doc.setFontSize(12);
-                doc.text(`${time}`, 65, y);
+                doc.setFont('times', 'bold').text(`Time:`, 20, y += 6);
+                doc.setFont('times', 'normal').text(`${time}`, 65, y);
 
-                const para2 = `The transaction was undertaken by me in response to an urgent operational requirement. The items/services were procured from ${vendor}, located ${location}`;
-                const para2Part2 = `. These vendors, being small-scale local suppliers, are currently not registered under the GST regime and are therefore unable to issue GST-compliant invoices.`;
-                const para3Part3 = `The selection of these vendors was based on their immediate availability, proximity, and reliability, which were crucial given the time-sensitive nature of the requirement. Sourcing from GST-registered vendors would have caused undue delays and hindered critical operations.`;
+                const para2 = `The transaction was undertaken by me in response to an urgent operational requirement. The items/services were procured from ${vendor}, located ${location}. These vendors, being small-scale local suppliers, are currently not registered under the GST regime and are therefore unable to issue GST-compliant invoices.`;
+                const para3 = `The selection of these vendors was based on their immediate availability, proximity, and reliability, which were crucial given the time-sensitive nature of the requirement. Sourcing from GST-registered vendors would have caused undue delays and hindered critical operations.`;
 
                 doc.text(doc.splitTextToSize(para2, 170), 20, y += 10);
-                doc.text(doc.splitTextToSize(para2Part2, 170), 20, y += 10);
-                doc.text(doc.splitTextToSize(para3Part3, 170), 20, y += 12);
+                doc.text(doc.splitTextToSize(para3, 170), 20, y += 12);
 
                 y += 25;
                 doc.text('To Illustrate:', 20, y);
@@ -238,9 +231,7 @@ async function savePDF(sessionId, callback) {
 
                 justifications.slice(0, 3).forEach(j => {
                     const isSelected = j === selectedJustification;
-                    doc.setFont('times', isSelected ? 'bold' : 'normal');
-                    doc.setFontSize(12);
-                    doc.setTextColor(isSelected ? 0 : 0, isSelected ? 128 : 0, isSelected ? 0 : 0);
+                    doc.setFont('times', isSelected ? 'bold' : 'normal').setTextColor(isSelected ? 0 : 0, isSelected ? 128 : 0, isSelected ? 0 : 0);
                     doc.text(`• ${j}`, 25, y, { maxWidth: 160 });
                     y += 12;
                 });
@@ -249,17 +240,15 @@ async function savePDF(sessionId, callback) {
                 let y = 70;
                 const fourth = justifications[3];
                 const isSelected = fourth === selectedJustification;
-                doc.setFont('times', isSelected ? 'bold' : 'normal');
-                doc.setFontSize(12);
-                doc.setTextColor(isSelected ? 0 : 0, isSelected ? 128 : 0, isSelected ? 0 : 0);
+                doc.setFont('times', isSelected ? 'bold' : 'normal').setTextColor(isSelected ? 0 : 0, isSelected ? 128 : 0, isSelected ? 0 : 0);
                 doc.text(`• ${fourth}`, 20, y, { maxWidth: 170 });
                 doc.setTextColor(0, 0, 0);
 
                 doc.setFont('times', 'normal');
-                doc.setFontSize(12);
                 y += 20;
-                const para3 = `All related transactions are supported by valid non-GST invoices, duly signed and acknowledged by the respective vendors. Furthermore, the materials and services received have been verified in terms of quality and quantity by the concerned team members.`;
-                doc.text(doc.splitTextToSize(para3, 170), 20, y);
+                const para = `All related transactions are supported by valid non-GST invoices, duly signed and acknowledged by the respective vendors. Furthermore, the materials and services received have been verified in terms of quality and quantity by the concerned team members.`;
+
+                doc.text(doc.splitTextToSize(para, 170), 20, y);
 
                 y += 25;
                 const para4 = `In view of the above, I kindly request your consideration for the approval and reimbursement of these non-GST bills under the relevant expense categories.`;
@@ -271,63 +260,37 @@ async function savePDF(sessionId, callback) {
                 y += 20;
                 doc.text('Sincerely,', 20, y);
 
-                doc.setFont('times', 'italic');
-                doc.setFontSize(18);
+                doc.setFont('times', 'italic').setFontSize(18);
                 doc.text(signatureText, 20, y += 12);
 
-                doc.setFont('times', 'bold');
-                doc.setFontSize(12);
+                doc.setFont('times', 'bold').setFontSize(12);
                 doc.text('Your Full Name:', 20, y += 12);
                 doc.setFont('times', 'normal');
-                doc.setFontSize(12);
                 doc.text(fullName, 80, y);
 
                 if (stampBase64) {
                     const imgWidth = 40;
                     const imgHeight = 40;
-                    const stampY = pageHeight - imgHeight - 50;
                     const stampX = pageWidth - imgWidth - 20;
+                    const stampY = pageHeight - imgHeight - 50;
                     doc.addImage(stampBase64, 'PNG', stampX, stampY, imgWidth, imgHeight);
                 }
-                    } else if (voucherImageBase64 && ((receiptBase64 && page === 3) || (!receiptBase64 && page === 3))) {
-                doc.setFont('times', 'bold');
-                doc.setFontSize(16);
+            } else if (voucherImageBase64 && ((receiptBase64 && page === 3) || (!receiptBase64 && page === 3))) {
+                doc.setFont('times', 'bold').setFontSize(16);
                 doc.text('Voucher Snapshot', pageWidth / 2, 40, { align: 'center' });
 
-                const marginTop = 80; // Maintain to keep height
-                const marginBottom = 50; // Maintain to keep height
-                const marginHorizontal = 0; // Ensure no horizontal margins
-                const availableWidth = pageWidth - 2 * marginHorizontal; // Full page width (210mm)
-                const availableHeight = pageHeight - marginTop - marginBottom; // Maintain height (167mm)
-
-                // Get natural image dimensions
+                const marginTop = 80, marginBottom = 50, availableHeight = pageHeight - marginTop - marginBottom;
                 const { width: naturalWidth, height: naturalHeight } = await getImageDimensions(voucherImageBase64);
                 if (naturalWidth === 0 || naturalHeight === 0) {
-                    console.warn('Invalid voucher image dimensions');
                     doc.text('Error: Unable to load voucher image', pageWidth / 2, pageHeight / 2, { align: 'center' });
                 } else {
-                    // Force full width and adjust height to fit, ignoring aspect ratio for width
-                    const imgWidth = pageWidth; // Force full width (210mm)
-                    const imgHeight = availableHeight; // Limit to available height (167mm)
-
-                    // Position image to fill the page
-                    const imgX = 0; // Start at left edge for full width
-                    const imgY = marginTop;
-
-                    // Add image with high quality, stretching to full width
-                    doc.addImage(voucherImageBase64, 'PNG', imgX, imgY, imgWidth, imgHeight, '', 'FAST');
+                    doc.addImage(voucherImageBase64, 'PNG', 0, marginTop, pageWidth, availableHeight, '', 'FAST');
                 }
-
             } else if (receiptBase64 && ((voucherImageBase64 && page === 4) || (!voucherImageBase64 && page === 3))) {
-                doc.setFont('times', 'bold');
-                doc.setFontSize(16);
+                doc.setFont('times', 'bold').setFontSize(16);
                 doc.text('Attached Receipt', pageWidth / 2, 50, { align: 'center' });
 
-                const marginTop = 60;
-                const marginBottom = 50;
-                const availableHeight = pageHeight - marginTop - marginBottom;
-                const availableWidth = pageWidth - 20;
-
+                const marginTop = 60, marginBottom = 50, availableHeight = pageHeight - marginTop - marginBottom, availableWidth = pageWidth - 20;
                 doc.addImage(receiptBase64, 'JPEG', 10, marginTop, availableWidth, availableHeight);
             }
         }
@@ -340,6 +303,7 @@ async function savePDF(sessionId, callback) {
         const pdfBase64 = doc.output('datauristring').split(',')[1];
         console.log('PDF base64 generated, length:', pdfBase64.length);
         callback({ pdfBase64, fileName });
+
     } catch (err) {
         console.error('Error generating PDF:', err);
         alert(`❌ Failed to generate PDF: ${err.message}`);

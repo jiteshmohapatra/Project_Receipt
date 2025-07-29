@@ -34,7 +34,7 @@ from word2number import w2n
 # Flask apps
 from flask import Flask
 
-from voucher import voucher_app, voucher_data, run_voucher_app
+from voucher import voucher_app, run_voucher_app
 
 # DB operations
 from database import init_db, insert_extracted_receipt, insert_or_update_brochure
@@ -217,8 +217,7 @@ async def process_receipt(query, user_id, category):
             #     "timestamp": time.time()
             # }
             insert_extracted_receipt(user_id, category, fields)
-            insert_or_update_brochure(session_id, fields)
-            link = f"http://192.168.1.3:5001/voucher/{session_id}?startapp=1"
+            link = f"http://192.168.1.48:5001/voucher?startapp=1"
             await query.edit_message_text(f"✅ Data saved and waiting for voucher....\n\n🌐 Fill voucher: {link}")
         else:
             await query.edit_message_text("⚠️ Unsupported category.")
