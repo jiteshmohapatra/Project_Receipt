@@ -179,6 +179,10 @@ VOUCHER_HTML = """
             <td colspan="3"><input type="file" id="additional_receipt" class="input" accept="image/*,application/pdf"></td>
         </tr>
         <tr>
+            <td class="label">Additional Location</td>
+            <td colspan="3"><input type="file" id="additional_receipt2" class="input" accept="image/*,application/pdf"></td>
+        </tr>
+        <tr>
             <td class="label">Upload Stamp</td>
             <td colspan="3"><input type="file" id="upload_stamp" class="input" accept="image/*,application/pdf"></td>
         </tr>
@@ -219,6 +223,10 @@ VOUCHER_HTML = """
             const fileInput1 = document.getElementById('additional_receipt');
             if (fileInput1.files.length > 0) {
                 formData.append('additional_receipt', fileInput1.files[0]);
+            }
+            const fileInput3 = document.getElementById('additional_receipt2');
+            if (fileInput3.files.length > 0) {
+                formData.append('additional_receipt2', fileInput3.files[0]);
             }
 
             const fileInput2 = document.getElementById('upload_stamp');
@@ -321,6 +329,7 @@ def init_db():
                 procured_from TEXT,
                 location TEXT,
                 additional_receipt BYTEA,
+                additional_receipt2 BYTEA,
                 upload_stamp BYTEA,
                 receiver_signature TEXT,
                 image BYTEA,
@@ -341,6 +350,15 @@ def voucher_form():
         conn = psycopg2.connect(**DATABASE_CONFIG)
         cur = conn.cursor()
 
+        cur.execute("SELECT slno FROM brochure ORDER BY id DESC LIMIT 1;")
+        last_slno_row = cur.fetchone()
+
+        # Extract number from last slno
+        if last_slno_row and last_slno_row[0].startswith("BCPL"):
+            last_num = int(''.join(filter(str.isdigit, last_slno_row[0])))
+            next_slno = f"BCPL{last_num + 1}"
+        else:
+            next_slno = "BCPL1"
         # Fetch only transaction_id and amount from the latest extracted_receipt
         cur.execute('''
             SELECT transaction_id, amount
@@ -353,6 +371,7 @@ def voucher_form():
         conn.close()
         logging.info(f"Fetched row: {row}")
         data = {
+            "Sl No" : next_slno,
             "transaction_id": row[0] if row else '',
             "amount": row[1] if row else ''
         }
@@ -374,16 +393,20 @@ def save_voucher():
         image_bytes = base64.b64decode(encoded)
 
         additional_receipt = request.files.get('additional_receipt')
+        print("111111111111")
+        additional_receipt2 = request.files.get('additional_receipt2')
+        print("2222222222222")
         upload_stamp = request.files.get('upload_stamp')
+        print("33333333333333")
 
         conn = psycopg2.connect(**DATABASE_CONFIG)
         cur = conn.cursor()
         cur.execute('''
             INSERT INTO brochure (
                 slno, date, account_name, debit, credit, amount, time,
-                reason, procured_from, location, additional_receipt,
+                reason, procured_from, location, additional_receipt,additional_receipt2,
                 upload_stamp, receiver_signature, image
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,%s)
             RETURNING id;
         ''', (
             data['slno'],
@@ -397,10 +420,12 @@ def save_voucher():
             data['procured_from'],
             data['location'],
             additional_receipt.read() if additional_receipt else None,
+            additional_receipt2.read() if additional_receipt2 else None,
             upload_stamp.read() if upload_stamp else None,
             data['receiver_signature'],
             psycopg2.Binary(image_bytes)
         ))
+        print("444444444")
         
         record_id = cur.fetchone()[0]
         conn.commit()

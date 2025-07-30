@@ -156,6 +156,7 @@ async function savePDF(recordId, callback) {
         const signatureText = document.getElementById('receiver_signature')?.value.trim();
         const stampInput = document.getElementById('upload_stamp');
         const receiptInput = document.getElementById('additional_receipt');
+        const receiptInput2 = document.getElementById('additional_receipt2');
 
         if (!transactionId || !amount || !date || !time || !vendor || !location || !justification || !fullName || !signatureText) {
             console.warn('Missing required fields:', { transactionId, amount, date, time, vendor, location, justification, fullName, signatureText });
@@ -168,6 +169,7 @@ async function savePDF(recordId, callback) {
 
         const stampBase64 = await readFileAsBase64(stampInput);
         const receiptBase64 = await readFileAsBase64(receiptInput);
+        const receipt2Base64 = await readFileAsBase64(receiptInput2);
         const voucherImageBase64 = await fetchVoucherImage(recordId);
         console.log('Files read:', { stampBase64: !!stampBase64, receiptBase64: !!receiptBase64 });
 
@@ -178,7 +180,7 @@ async function savePDF(recordId, callback) {
         let totalPages = 2;
         if (voucherImageBase64) totalPages++;
         if (receiptBase64) totalPages++;
-
+        
         const selectedJustification = justificationMap[justification] || '';
 
         for (let page = 1; page <= totalPages; page++) {
