@@ -217,7 +217,7 @@ async def process_receipt(query, user_id, category):
             #     "timestamp": time.time()
             # }
             insert_extracted_receipt(user_id, category, fields)
-            link = f"http://192.168.1.4:5001/voucher?startapp=1"
+            link = f"http://192.168.1.48:5001/voucher?startapp=1"
             await query.edit_message_text(f"✅ Data saved and waiting for voucher....\n\n🌐 Fill voucher: {link}")
         else:
             await query.edit_message_text("⚠️ Unsupported category.")
