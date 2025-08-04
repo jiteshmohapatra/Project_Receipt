@@ -17,7 +17,7 @@ voucher_data = {}
 # Flask app
 voucher_app = Flask(__name__)
 
-# Path to your logo file (place logo.png in a folder called 'static')
+
 LOGO_PATH = "static/logo.png"
 
 # Database Config
