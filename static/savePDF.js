@@ -7,7 +7,7 @@ const justifications = [
     'Travel expenses included local transport arrangements where Vendors provided hand-written receipts without GST components'
 ];
 
-// Mapping of dropdown values to full justification texts
+
 const justificationMap = {
     'Diesel purchases': justifications[0],
     'Labour Charges': justifications[1],
