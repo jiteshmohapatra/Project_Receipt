@@ -201,7 +201,7 @@ VOUCHER_HTML = """
 
    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-   <script src="/static/savePDF.js"></script>
+   <script src="/static/savePDF.js?v={{timestamp}}"></script>
 
 <script>
     function saveVoucher() {
@@ -505,7 +505,9 @@ def send_pdf_email_multiple(pdf_bytes, file_name, recipients):
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as smtp:
         smtp.starttls()
         smtp.login(SMTP_USER, SMTP_PASS)
-        smtp.send_message(msg)        
+        smtp.send_message(msg)      
+    print("📧 Sending to:", recipients)
+  
 
 # Run
 def run_voucher_app(host='0.0.0.0', port=5001, use_reloader=False):
