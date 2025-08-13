@@ -30,6 +30,7 @@ def init_db():
                 amount TEXT,
                 datetime TEXT,
                 transaction_id TEXT NULL,
+                status VARCHAR(20) DEFAULT 'pending',  -- 🆕 Track voucher status
                 person_name TEXT,
                 upi_id TEXT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -73,8 +74,8 @@ def insert_extracted_receipt(user_id, category, fields):
         cur = conn.cursor()
         cur.execute('''
             INSERT INTO extracted_receipts (
-                user_id, category, amount, datetime, transaction_id, person_name, upi_id
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                user_id, category, amount, datetime, transaction_id, person_name, upi_id, status
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ''', (
             user_id,
             category,
@@ -82,7 +83,9 @@ def insert_extracted_receipt(user_id, category, fields):
             fields.get("Date & Time"),
             fields.get("Transaction ID"),
             fields.get("Person Name"),
-            fields.get("UPI ID")
+            fields.get("UPI ID"),
+            fields.get("status", "pending")  # Default to 'pending'
+            
         ))
         conn.commit()
         cur.close()

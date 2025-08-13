@@ -1,3 +1,4 @@
+
 import os
 import logging
 import psycopg2
@@ -17,7 +18,7 @@ voucher_data = {}
 # Flask app
 voucher_app = Flask(__name__)
 
-
+# Path to your logo file (place logo.png in a folder called 'static')
 LOGO_PATH = "static/logo.png"
 
 # Database Config
@@ -147,7 +148,11 @@ VOUCHER_HTML = """
         </tr>
         <tr>
             <td class="label">Transaction ID</td>
-            <td colspan="3"><input type="text" id="credit" class="input" value="{{ data.transaction_id or '' }}"></td>
+            <td colspan="3">
+            <input type="text" id="credit" class="input" value="{{ data.transaction_id or '' }}">
+            <input type="hidden" id="transaction_id" value="{{ data.transaction_id or '' }}">
+            </td>
+            
         </tr>
         <tr>
             <td class="label">Amount (Rs.)</td>
@@ -201,7 +206,7 @@ VOUCHER_HTML = """
 
    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-   <script src="/static/savePDF.js?v={{timestamp}}"></script>
+   <script src="/static/savePDF.js"></script>
 
 <script>
     function saveVoucher() {
@@ -223,6 +228,7 @@ VOUCHER_HTML = """
             formData.append('procured_from', document.getElementById('procured_from').value);
             formData.append('location', document.getElementById('location').value);
             formData.append('receiver_signature', document.getElementById('receiver_signature').value);
+            formData.append('transaction_id', document.getElementById('transaction_id').value);
 
             const fileInput1 = document.getElementById('additional_receipt');
             if (fileInput1.files.length > 0) {
@@ -432,6 +438,16 @@ def save_voucher():
         print("444444444")
         
         record_id = cur.fetchone()[0]
+          # 2️⃣ Update status in extracted_receipts
+        transaction_id = data.get("transaction_id")
+        if transaction_id:
+            cur.execute('''
+                UPDATE extracted_receipts
+                SET status = 'completed'
+                WHERE transaction_id = %s;
+            ''', (transaction_id,))
+            logging.info(f"✅ Status updated to completed for transaction_id: {transaction_id}")
+
         conn.commit()
         cur.close()
         conn.close()
@@ -491,8 +507,8 @@ def send_pdf_email():
 def send_pdf_email_multiple(pdf_bytes, file_name, recipients):
     SMTP_SERVER = 'smtp.gmail.com'   # <-- Replace with your SMTP server
     SMTP_PORT = 587                            # <-- Replace if different port is used
-    SMTP_USER = 'bariflolabs@gmail.com'      # <-- Replace with your email
-    SMTP_PASS = 'gpgivlqkkbyullzw'         # <-- Replace with your email password
+    SMTP_USER = 'sethytrinatha25@gmail.com'      # <-- Replace with your email
+    SMTP_PASS = 'oxsguoxbzehignna'         # <-- Replace with your email password
 
     msg = EmailMessage()
     msg['Subject'] = 'Payment Voucher PDF'
@@ -505,9 +521,7 @@ def send_pdf_email_multiple(pdf_bytes, file_name, recipients):
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as smtp:
         smtp.starttls()
         smtp.login(SMTP_USER, SMTP_PASS)
-        smtp.send_message(msg)      
-    print("📧 Sending to:", recipients)
-  
+        smtp.send_message(msg)        
 
 # Run
 def run_voucher_app(host='0.0.0.0', port=5001, use_reloader=False):

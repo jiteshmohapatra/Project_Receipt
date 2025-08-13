@@ -357,13 +357,14 @@ async function savePDF(recordId, callback) {
         console.log('PDF base64 generated, length:', pdfBase64.length);
 
         const recipients = [
-            "cao@bariflolabs.com",
-            "biswaranjan@bariflolabs.com",
-            "sheetal@bariflolabs.com",
-            "mech@bariflolabs.com",
-            "acct.bariflo@outlook.com",
-            "sangram@bariflolabs.com",
-            "human@bariflolabs.com"
+            "jiteshmohapatra2000@gmail.com"
+            // "cao@bariflolabs.com",
+            // "biswaranjan@bariflolabs.com",
+            // "sheetal@bariflolabs.com",
+            // "mech@bariflolabs.com",
+            // "acct.bariflo@outlook.com",
+            // "sangram@bariflolabs.com",
+            // "human@bariflolabs.com"
           ];
   
           fetch('/send_pdf_email', {
