@@ -300,9 +300,12 @@ VOUCHER_HTML = """
 """
 
 from flask import Flask, render_template_string, request, jsonify, send_file
-from datetime import datetime
+from datetime import datetime ,timedelta
 from io import BytesIO
 
+
+from apscheduler.schedulers.background import BackgroundScheduler
+import pytz
 # Shared storage for session data
 voucher_data = {}
 
@@ -352,6 +355,76 @@ def init_db():
         logging.info("✅ Database initialized.")
     except Exception as e:
         logging.error(f"❌ Failed to init DB: {e}")
+
+
+
+# 🆕 New function to get pending/completed counts from last 24 hours
+from datetime import datetime, timedelta
+import pytz
+
+def get_last_24h_status():
+    """Return pending and completed counts from last 24 hours as text, including pending transaction IDs."""
+    try:
+        conn = psycopg2.connect(**DATABASE_CONFIG)
+        cur = conn.cursor()
+
+        yesterday = datetime.now(pytz.timezone("Asia/Kolkata")) - timedelta(hours=24)
+
+        # Get counts
+        cur.execute("""
+            SELECT status, COUNT(*)
+            FROM extracted_receipts
+            WHERE created_at >= %s
+            GROUP BY status;
+        """, (yesterday,))
+        results = cur.fetchall()
+
+        pending_count = 0
+        completed_count = 0
+        for status, count in results:
+            if status and status.lower() == "pending":
+                pending_count = count
+            elif status and status.lower() == "completed":
+                completed_count = count
+
+        # 🆕 Get transaction IDs for pending tasks
+        cur.execute("""
+            SELECT transaction_id ,person_name
+            FROM extracted_receipts
+            WHERE created_at >= %s AND LOWER(status) = 'pending'
+            ORDER BY created_at DESC;
+        """, (yesterday,))
+        pending_records = cur.fetchall()
+
+
+        cur.close()
+        conn.close()
+
+        # Format pending IDs (limit to avoid huge messages)
+        if pending_records:
+            pending_list = "\n".join([f"🔹 {txn} — {name}" for txn, name in pending_records[:10]]
+            )  # show up to 10
+            if len(pending_records) > 10:
+                pending_list += f"\n... and {len(pending_records) - 10} more"
+        else:
+            pending_list = "✅ No pending tasks in last 24h"
+
+
+        return (
+            "📢 **Daily Work Summary (Last 24h)**\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"🕒 Period: {yesterday.strftime('%d-%b %H:%M')} → Now\n"
+            f"📌 Pending: {pending_count}\n"
+            f"✅ Completed: {completed_count}\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"📝 **Waiting For Justification Letter:**\n{pending_list}"
+        )
+
+
+    except Exception as e:
+        logging.error(f"❌ Error getting status: {e}")
+        return "Error fetching status."
+
 
 # 👇 Render empty voucher form
 @voucher_app.route("/voucher", methods=["GET"])

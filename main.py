@@ -39,6 +39,10 @@ from voucher import voucher_app, run_voucher_app
 # DB operations
 from database import init_db, insert_extracted_receipt, insert_or_update_brochure
 
+# 🆕 Add these
+from voucher import get_last_24h_status
+from apscheduler.schedulers.background import BackgroundScheduler
+
 # Load environment
 load_dotenv()
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -52,7 +56,7 @@ logging.basicConfig(level=logging.INFO)
 # State management
 user_images = {}
 user_state = {}
-
+CHAT_IDS = [-1002852419283]
 
 # Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -217,13 +221,30 @@ async def process_receipt(query, user_id, category):
             #     "timestamp": time.time()
             # }
             insert_extracted_receipt(user_id, category, fields)
-            link = f"http://192.168.1.3:5001/voucher?startapp=1"
+            link = f"http://192.168.1.5:5001/voucher?startapp=1"
             await query.edit_message_text(f"✅ Data saved and waiting for voucher....\n\n🌐 Fill voucher: {link}")
         else:
             await query.edit_message_text("⚠️ Unsupported category.")
     except Exception as e:
         logging.error(f"❌ Processing error: {e}")
         await query.edit_message_text("❌ Error while processing receipt.")
+
+
+
+def send_daily_status():
+    status_text = get_last_24h_status()
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    for chat_id in CHAT_IDS:
+        payload = {
+            "chat_id": chat_id,
+            "text": status_text
+        }
+        try:
+            requests.post(url, json=payload)
+            logging.info(f"✅ Daily status sent to Telegram user {chat_id}")
+        except Exception as e:
+            logging.error(f"❌ Failed to send Telegram status to {chat_id}: {e}")
+
 
 
 # 👇 Add this at the end of main.py (before `if __name__ == "__main__"`):
@@ -239,10 +260,18 @@ def start_voucher_server():
 if __name__ == "__main__":
     init_db()
     start_voucher_server()  # ✅ Start the Flask voucher server
+
+    scheduler = BackgroundScheduler(timezone="Asia/Kolkata")
+    scheduler.add_job(send_daily_status, "cron", hour=15, minute=10)  
+    scheduler.start()
+
     app_telegram = ApplicationBuilder().token(BOT_TOKEN).build()
     app_telegram.add_handler(CommandHandler("start", start))
     app_telegram.add_handler(MessageHandler(filters.PHOTO, handle_image))
     app_telegram.add_handler(CallbackQueryHandler(handle_callback))
     app_telegram.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), start))
     app_telegram.run_polling()
+
+    
+
 
