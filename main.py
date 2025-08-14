@@ -221,7 +221,7 @@ async def process_receipt(query, user_id, category):
             #     "timestamp": time.time()
             # }
             insert_extracted_receipt(user_id, category, fields)
-            link = f"http://192.168.1.5:5001/voucher?startapp=1"
+            link = f"https://accounts.bc-pl.com/voucher?startapp=1"
             await query.edit_message_text(f"✅ Data saved and waiting for voucher....\n\n🌐 Fill voucher: {link}")
         else:
             await query.edit_message_text("⚠️ Unsupported category.")
@@ -251,7 +251,7 @@ def send_daily_status():
 def start_voucher_server():
     thread = threading.Thread(
         target=run_voucher_app,
-        kwargs={'host': '0.0.0.0', 'port': 5001, 'use_reloader': False},
+        kwargs={'host': '0.0.0.0', 'port': 5000, 'use_reloader': False},
         daemon=True
     )
     thread.start()
@@ -262,7 +262,7 @@ if __name__ == "__main__":
     start_voucher_server()  # ✅ Start the Flask voucher server
 
     scheduler = BackgroundScheduler(timezone="Asia/Kolkata")
-    scheduler.add_job(send_daily_status, "cron", hour=15, minute=10)  
+    scheduler.add_job(send_daily_status, "cron", hour=0, minute=0)  
     scheduler.start()
 
     app_telegram = ApplicationBuilder().token(BOT_TOKEN).build()

@@ -597,6 +597,6 @@ def send_pdf_email_multiple(pdf_bytes, file_name, recipients):
         smtp.send_message(msg)        
 
 # Run
-def run_voucher_app(host='0.0.0.0', port=5001, use_reloader=False):
+def run_voucher_app(host='0.0.0.0', port=5000, use_reloader=False):
     init_db()
     voucher_app.run(host=host, port=port, use_reloader=use_reloader)

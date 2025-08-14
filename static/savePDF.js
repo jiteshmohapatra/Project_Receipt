@@ -223,7 +223,8 @@ async function savePDF(recordId, callback) {
                 doc.text(`Amount Rs.:`, 20, y += 6);
                 doc.setFont('times', 'normal');
                 doc.setFontSize(12);
-                doc.text(`${amount}`, 65, y);
+                const cleanAmount = amount.replace(/[^\d.,]/g, ''); // Remove all non-digit, non-comma, non-period characters
+                doc.text(`${cleanAmount}`, 65, y);
 
                 doc.setFont('times', 'bold');
                 doc.setFontSize(12);
