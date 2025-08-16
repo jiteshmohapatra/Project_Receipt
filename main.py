@@ -56,7 +56,7 @@ logging.basicConfig(level=logging.INFO)
 # State management
 user_images = {}
 user_state = {}
-CHAT_IDS = [-1002852419283]
+CHAT_IDS = [-1002550870686]
 
 # Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -123,6 +123,9 @@ def extract_amount(text):
 
 # Extract datetime from formats like "28 Feb 2025, 21:39" or "21:39 on 28 Feb 2025"
 def extract_datetime(text):
+    match = re.search(r'(\d{1,2}:\d{2})\s*(?:am|pm)?\s+on\s+(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})', text, re.IGNORECASE)
+    if match:
+        return f"{match.group(1)} on {match.group(2)}"
     # Pattern 1: 21:39 on 28 Feb 2025
     match = re.search(r'(\d{1,2}:\d{2})\s+on\s+(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})', text)
     if match:
@@ -137,10 +140,15 @@ def extract_datetime(text):
     match = re.search(r'\d{1,2}/\d{1,2}/\d{4}[ \t]+\d{1,2}:\d{2}', text)
     return match.group(0).strip() if match else "Not Found"
 
-# Extract transaction ID (12+ alphanumeric characters, often UPI format)
 def extract_transaction_id(text):
-    match = re.search(r'\b([A-Z0-9]{12,})\b', text)
+    # Key concept: Look for "Transaction ID" label first, then extract the ID after it
+    match = re.search(r'Transaction\s*ID\s*[:\s]*([A-Z0-9]{12,})', text, re.IGNORECASE)
     return match.group(1) if match else "Not Found"
+
+# # Extract transaction ID (12+ alphanumeric characters, often UPI format)
+# def extract_transaction_id(text):
+#     match = re.search(r'\b([A-Z0-9]{12,})\b', text)
+#     return match.group(1) if match else "Not Found"
 
 # Extract person name from lines like "Paid to\nNAME" or "Banking Name: NAME"
 def extract_person_name(text):
@@ -185,7 +193,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("\U0001F7E3 PhonePe", callback_data="PhonePe"),
                 InlineKeyboardButton("\U0001F537 Paytm", callback_data="Paytm"),
-                InlineKeyboardButton("\U0001F535 GooglePay", callback_data="GooglePay")]
+                InlineKeyboardButton("\U0001F535 GooglePay", callback_data="GooglePay"),
+                InlineKeyboardButton("\U0001F7E2 Others", callback_data="Others")]
             ])
             await query.edit_message_text("💡 Choose UPI type:", reply_markup=keyboard)
         else:
@@ -203,7 +212,7 @@ async def process_receipt(query, user_id, category):
         if not text or len(text.strip()) < 10:
             await query.edit_message_text("⚠️ Image is unclear or unreadable.")
             return
-        if category in ["PhonePe", "Paytm", "GooglePay"]:
+        if category in ["PhonePe", "Paytm", "GooglePay","Others"]:
             formatted = extract_limited_fields(text, category)
             fields = {}
             for line in formatted.splitlines():
